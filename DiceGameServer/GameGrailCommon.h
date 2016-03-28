@@ -25,17 +25,24 @@ typedef map< int, GameGrailPlayerContext* > PlayerContextList;
 const int SUMMON[] = {1, 2, 3, 4, 5, 6, 7, 8, 9,10,
 	                 11,12,13,14,15,16,17,18,19,20,
 			         21,22,23,24,25,26,27,28,29,30,
-					 31};
+					 31,108};
+const int BASIC_ROLE[] = {1, 2, 3, 4, 5, 6, 7, 9,10,
+	                 11,12,13,14,15,16,17,18,19,20,
+					 21,22,23,24};
+const int MO_DAO[] ={8};
+const int SP_MO_DAO[] ={108};
+const int FIRST_EXT[] = {26, 28, 29};
+const int SECOND_EXT[] = {25, 27, 30, 31};
 bool isValidRoleID(int roleID);
 
 enum GrailError{
 	GE_SUCCESS,
 	GE_TIMEOUT,
 	GE_URGENT,
-	GE_EMPTY_HANDLE,
-	GE_NO_STATE,
+	GE_EMPTY_HANDLE,	
 	GE_DECK_OVERFLOW,
 	GE_CARD_NOT_ENOUGH,
+	GE_USERID_NOT_FOUND,
 	GE_HANDCARD_NOT_FOUND,
 	GE_BASIC_EFFECT_NOT_FOUND,
 	GE_BASIC_EFFECT_ALREADY_EXISTS,
@@ -44,17 +51,24 @@ enum GrailError{
 	GE_MOVECARD_FAILED,
     GE_INCONSISTENT_STATE,
 	GE_FATAL_ERROR,
+	GE_INVALID_TABLEID,
 	GE_INVALID_PLAYERID,
 	GE_INVALID_CARDID,
 	GE_INVALID_ROLEID,
 	GE_INVALID_ACTION,
 	GE_INVALID_STEP,
 	GE_INVALID_EXCLUSIVE_EFFECT,
-	GE_NOT_SUPPORTED,
 	GE_INVALID_ARGUMENT,
+	GE_NO_STATE,
 	GE_NO_CONTEXT,
 	GE_NO_REPLY,
-	GE_DISCONNECTED
+	GE_NOT_SUPPORTED,
+	GE_PLAYER_FULL,
+	GE_GUEST_FULL,
+	GE_DISCONNECTED,
+	GE_NOT_WELCOME,
+	GE_WRONG_PASSWORD,
+	GE_VIP_ONLY
 };
 
 enum CAUSE{
@@ -109,6 +123,8 @@ enum CAUSE{
 	MO_DAN_ZHANG_WO = 802,
 	MO_DAN_RONG_HE = 803,
 	HUI_MIE_FENG_BAO = 804,
+	SP_MO_BAO_CHONG_JI=805,
+	FA_LI_HU_DUN=806,
 	XIU_LUO_LIAN_ZHAN = 901,
     AN_YING_NING_JU = 902,
     AN_YING_ZHI_LI = 903,
@@ -326,6 +342,8 @@ enum STEP{
 #define CARDSUM 150
 #define CARDBUF 30
 #define MAXPLAYER 8
+#define MAXROLES 20
+const int BP_ALTERNATIVE_NUM[] = {12,16,20};
 extern CardEntity* cardList[CARDSUM];
 CardEntity* getCardByID(int id);
 #define RED  1
@@ -405,8 +423,11 @@ string combMessage(string item1,string item2 = "",string item3 = "",string item4
 class Coder
 {
 public:
-    static string beginNotice(string seatCode){return "2;" + seatCode + ";";}
-    static string turnBegineNotice(int ID){return "3;" + TOQSTR(ID) + ";";}
+	static void logInResponse(int state, string nickname, LoginResponse& rep)
+	{
+		rep.set_state(state);
+		rep.set_nickname(nickname);
+	}
     static void askForReBat(int type,int cardID,int dstID,int srcID, CommandRequest& cmd_req)
 	{
 		cmd_req.set_cmd_type(CMD_RESPOND);
@@ -498,10 +519,6 @@ public:
 		if (!hasEx)
 			player_info->add_delete_field("ex_cards");
 	}
-    static string askForDiscover(int ID, int sum,string show){return combMessage("49",TOQSTR(ID),TOQSTR(sum),show);}
-    static string reshuffleNotice(int howManyNew){return combMessage("10",TOQSTR(howManyNew));}
-    static string endNotice(int winColor){return "12;" + TOQSTR(winColor) + ";";}
-    static string discardNotice(int ID,int sum,string show,vector < int > cards);
     static void hitNotice(int result,int isActiveAttack,int dstID,int srcID, HitMsg& hit_msg)
 	{
 		hit_msg.set_cmd_id(isActiveAttack);
@@ -520,7 +537,6 @@ public:
 			update_info.set_blue_crystal(crystal);
 		}
 	}
-    static string cupNotice(int color,int cup){return combMessage("17",TOQSTR(color),TOQSTR(cup));}
     static void energyNotice(int ID, int gem, int crystal, GameInfo& update_info)
 	{
 		SinglePlayerInfo* player_info = update_info.add_player_infos();
@@ -534,7 +550,6 @@ public:
 		player_info->set_id(ID);
 		player_info->set_heal_count(cross);
 	}
-    static string getCardNotice(int sum,vector < int > cards,int dstID,bool show);
     static void hurtNotice(int dstID, int srcID, int type, int point, int cause, HurtMsg& hurt_msg)
 	{
 		hurt_msg.set_dst_id(dstID);
@@ -553,8 +568,6 @@ public:
 		cmd->add_args(ID);
 		cmd->add_args(howMany);
 	}
-    //static string weakNotice(int ID,int act,int howMany=3){return combMessage("24",TOQSTR(ID),TOQSTR(act),TOQSTR(howMany));}
-    static string shieldNotic(int ID){return "25;" + TOQSTR(ID) + ";";}
     static void askForMissile(int dstID,int srcID,int hurtSum,int nextID, CommandRequest& cmd_req)
 	{
 		cmd_req.set_cmd_type(CMD_RESPOND);
@@ -669,11 +682,6 @@ public:
 			}
 		}
 	}
-    static string unactionalNotice(int playerID){return combMessage(TOQSTR(UNACTIONALNOTICE),TOQSTR(playerID));}
-    static string notice(string content){return combMessage(TOQSTR(NOTICE),content);}
-    static string askForDiscardMagic(int ID){return combMessage("850",TOQSTR(ID));}
-    static string askToGiveCard(int ID,int n){return combMessage("750",TOQSTR(ID),TOQSTR(n));}
-    static string askForChongYing(int ID,int color){return combMessage("2950",TOQSTR(ID),TOQSTR(color));}
     static void handcardMaxNotice(int ID,int howMany, GameInfo& game_info)
 	{
 		SinglePlayerInfo* player_info = game_info.add_player_infos();
@@ -686,7 +694,6 @@ public:
 		player_info->set_id(ID);
 		player_info->set_is_knelt(flag);
 	}
-    static string specialNotice(int ID,int type,int flag){return combMessage("43",TOQSTR(ID),TOQSTR(type),TOQSTR(flag));}
     static void tokenNotice(int ID,int tokenID,int howMany, GameInfo& game_info)
 	{
 		SinglePlayerInfo* player_info = game_info.add_player_infos();
@@ -698,33 +705,39 @@ public:
 	}
 	static void askForRole(int ID, int howMany, const int *roles, RoleRequest& cmd_req)
 	{
+		cmd_req.set_id(ID);
 		cmd_req.set_strategy(ROLE_STRATEGY_31);
 		for(int i = 0; i < howMany; i++){
 			cmd_req.add_role_ids(roles[i]);
 		}
 	}
-    static string coverCardNotice(int playerID,int howMany,vector < int > cards,bool remove,bool show);
-    static string askForSkillNumber(int playerID,int skillNum){return combMessage(TOQSTR(skillNum));}
-    static string optionalRoleNotice(int num, int *roles);
-    static string askForBan(int ID);
-    static string banNotice(int ID, int role);
-    static string askForPick(int ID);
-    static string pickNotice(int ID, int role);
+	static void setAlternativeRoles(int ID, int howMany, const int *roles, const int *chosen, RoleRequest& cmd_req)
+	{
+		cmd_req.set_id(ID);
+		cmd_req.set_strategy(ROLE_STRATEGY_BP);
+		for(int i = 0; i < howMany; i ++){
+			cmd_req.add_role_ids(roles[i]);
+			cmd_req.add_args(chosen[i]);
+		}
+	}
 	static void roomInfo(PlayerContextList players, list< int > teamA, list< int > teamB, GameInfo& room_info)
 	{
 		SinglePlayerInfo *player_info;
 
 		for(PlayerContextList::iterator it = players.begin(); it != players.end(); it++)
 		{
-			player_info = room_info.add_player_infos();
-			player_info->set_id(it->first);
-			//FIXME: nickname
-			player_info->set_nickname(it->second->getUserId());
-			player_info->set_ready(it->second->isReady());
-			if(teamA.end() != std::find(teamA.begin(), teamA.end(), it->first))
-				player_info->set_team(1);
-			else if(teamB.end() != std::find(teamB.begin(), teamB.end(), it->first))
-				player_info->set_team(0);			
+			int id = it->first;
+			GameGrailPlayerContext* context = it->second;
+			if(context->isConnected()){	
+				player_info = room_info.add_player_infos();
+				player_info->set_id(id);						
+				player_info->set_nickname(context->getName());
+				player_info->set_ready(context->isReady());
+				if(teamA.end() != std::find(teamA.begin(), teamA.end(), id))
+					player_info->set_team(1);
+				else if(teamB.end() != std::find(teamB.begin(), teamB.end(), id))
+					player_info->set_team(0);
+			}
 		}
 	}
 	static void errorMsg(int id, int dstId, Error& error)

@@ -6,10 +6,7 @@
 
 int StateWaitForEnter::handle(GameGrail* engine)
 {
-	//ztLoggerWrite(ZONE, e_Debug, "[Table %d] Enter StateWaitForEnter", engine->getGameId());
-	//FIXME: skip ready 
-	//if(engine->isAllStartReady())
-	if(engine->isTableFull())
+	if(engine->isAllStartReady())
 	{
 		engine->popGameState();
 		engine->pushGameState(new StateSeatArrange);
@@ -30,7 +27,7 @@ int StateSeatArrange::handle(GameGrail* engine)
 
 	if(!isSet)
 	{
-		srand (time(NULL));
+		srand ((unsigned int)time(NULL));
 		assignTeam(engine);
 		vector< int > colors = assignColor(engine->m_seatMode, m_maxPlayers);
 
@@ -93,18 +90,76 @@ void StateSeatArrange::assignTeam(GameGrail* engine)
 	red = red_v;
 	blue = blue_v;
 }
-
+ 
 vector< int > StateSeatArrange::assignColor(int mode, int playerNum)
 {
 	vector< int > colors;
-	if(mode == 0)
-	{		
-		for(int i = 0; i < playerNum/2; i++)
+	switch(mode)
+	{
+	case SEAT_MODE_RANDOM:
+		for(int i = 0; i < playerNum/2; i++){
 			colors.push_back(1);
-		for(int i = 0; i < playerNum/2; i++)
 			colors.push_back(0);
+		}
 		//首位必红
 		std::random_shuffle (++colors.begin(), colors.end());	
+		break;
+	case SEAT_MODE_2COMBO:
+	{
+		int colors_t[MAXPLAYER];
+		for(int i = 0; i < playerNum; i += 2){
+			colors_t[i] = 1;
+			colors_t[i+1] = 0;
+		}
+		int chosen = 4 % playerNum;
+		int swapped = (chosen-1 + playerNum) % playerNum;
+		int temp = colors_t[chosen];
+		colors_t[chosen] = colors_t[swapped];
+		colors_t[swapped] = temp;
+		//首位必红
+		int firstRed = rand() % (playerNum/2) + 1;
+		int count = 0;
+		int firstRedId = -1;
+		while(count < firstRed){
+			firstRedId++;
+			if(colors_t[firstRedId] == 1)
+				count++;
+		}
+		for(int i = firstRedId; i < playerNum; i++){
+			colors.push_back(colors_t[i]);
+		}
+		for(int i = 0; i < firstRedId; i++){
+			colors.push_back(colors_t[i]);
+		}
+
+	}
+		break;
+	case SEAT_MODE_3COMBO:
+	{
+		int colors_t[] = {1, 1, 1, 0, 0, 0};
+		//首位必红
+		int firstRed = rand() % (playerNum/2) + 1;
+		int count = 0;
+		int firstRedId = -1;
+		while(count < firstRed){
+			firstRedId++;
+			if(colors_t[firstRedId] == 1)
+				count++;
+		}
+		for(int i = firstRedId; i < playerNum; i++){
+			colors.push_back(colors_t[i]);
+		}
+		for(int i = 0; i < firstRedId; i++){
+			colors.push_back(colors_t[i]);
+		}
+    }
+		break;
+	case SEAT_MODE_INTERLACE:
+		for(int i = 0; i < playerNum/2; i++){
+			colors.push_back(1);
+			colors.push_back(0);
+		}
+		break;
 	}
 	return colors;
 }
@@ -121,7 +176,6 @@ int StateRoleStrategyRandom::handle(GameGrail* engine)
 	for(int i = 0; i < engine->getGameMaxPlayers(); i++){
 		// i为玩家编号，不是座号		
 		if(GE_SUCCESS == (ret=roles->pop(1, &roleID))){
-			//FIXME: 全封印时代
 			Coder::roleNotice(i, roleID, game_info);
 		}
 		else{
@@ -216,6 +270,121 @@ int StateRoleStrategyAny::handle(GameGrail* engine)
 	engine->popGameState();
 	engine->pushGameState(new StateGameStart);
 	return isTimeOut ? GE_TIMEOUT : GE_SUCCESS;
+}
+
+int StateRoleStrategyBP::handle(GameGrail* engine)
+{
+	ztLoggerWrite(ZONE, e_Debug, "[Table %d] Enter StateRoleStrategyBP", engine->getGameId());
+	Deck* roles;
+	
+	int ret = 0;
+	GameInfo& game_info = engine->room_info;
+	if(step == 0){
+		playerNum = engine->getGameMaxPlayers();
+		alternativeNum = BP_ALTERNATIVE_NUM[playerNum/2-2];
+		if(alternativeNum <= 0)
+			return GE_FATAL_ERROR;
+		alternativeRoles = new int[alternativeNum];
+		options = new int[alternativeNum];
+		memset(alternativeRoles, 0, sizeof(int)* alternativeNum);
+		memset(options, 0, sizeof(int)* alternativeNum);
+		roles = engine->initRoles();
+		GameInfo& room_info = engine->room_info;
+		SinglePlayerInfo* player_it;
+		for(int i = 0; i < playerNum; i++){
+			player_it = (SinglePlayerInfo*)&(room_info.player_infos().Get(i));
+			int color = player_it->team();
+			if(color == RED)
+				red.push_back(player_it->id());
+			else
+				blue.push_back(player_it->id());
+		}
+		RoleRequest message;
+		if(GE_SUCCESS == (ret = roles->pop(alternativeNum, alternativeRoles))){
+			Coder::setAlternativeRoles(-1, alternativeNum, alternativeRoles, options, message);
+			message.set_opration(BP_NULL);
+		}
+		else{
+			return ret;
+		}
+		engine->sendMessage(-1, network::MSG_ROLE_REQ, message);
+		step = 1;
+	}
+	while(step > 0 && step <= (playerNum*2)) {
+		int color = step % 2;
+		int index = (step-1)/4;
+		int isBan = ((step-1)/2)%2;
+		int id = 0;
+		if(color == 1)
+			id = red[index];
+		else
+			id = blue[index];
+		if(isBan == 0)
+		{
+			RoleRequest message;
+			Coder::setAlternativeRoles(id, alternativeNum, alternativeRoles, options, message);
+			message.set_opration(BP_BAN);
+			bool recieved = engine->waitForOne(id, network::MSG_ROLE_REQ, message);
+			if(recieved)
+			{
+				void* reply;
+				int ret;
+				if (GE_SUCCESS == (ret = engine->getReply(id, reply)))
+				{
+					PickBan* respond = (PickBan*) reply;
+					int chosen = respond->role_ids(0);
+					Coder::roleNotice(id, chosen, game_info);
+					for(int i = 0; i < alternativeNum; ++ i)
+						if(alternativeRoles[i] == chosen)
+						{
+							options[i] = step;
+							break;
+						}
+				}
+			}
+			else
+				return GE_TIMEOUT;
+		}
+		else
+		{
+			RoleRequest message;
+			Coder::setAlternativeRoles(id, alternativeNum, alternativeRoles, options, message);
+			message.set_opration(BP_PICK);
+			bool recieved = engine->waitForOne(id, network::MSG_ROLE_REQ, message);
+			if(recieved)
+			{
+				void* reply;
+				int ret;
+				if (GE_SUCCESS == (ret = engine->getReply(id, reply)))
+				{
+					PickBan* respond = (PickBan*) reply;
+					int chosen = respond->role_ids(0);
+					Coder::roleNotice(id, chosen, game_info);
+					for(int i = 0; i < alternativeNum; ++ i)
+						if(alternativeRoles[i] == chosen)
+						{
+							options[i] = step;
+							break;
+						}
+				}
+			}
+			else
+				return GE_TIMEOUT;
+		}
+		RoleRequest message;
+		Coder::setAlternativeRoles(-1, alternativeNum, alternativeRoles, options, message);
+		message.set_opration(BP_NULL);
+		engine->sendMessage(-1, network::MSG_ROLE_REQ, message);
+		step++;
+	}
+
+	game_info.set_is_started(true);
+	engine->sendMessage(-1, MSG_GAME, game_info);
+
+	engine->initPlayerEntities();
+	engine->popGameState();
+	engine->pushGameState(new StateGameStart);
+	return ret ? GE_TIMEOUT : GE_SUCCESS;
 }
 
 int StateGameStart::handle(GameGrail* engine)
@@ -1873,14 +2042,8 @@ int StateShowHand::handle(GameGrail* engine)
 
 int StateGameOver::handle(GameGrail* engine)
 {
-	if(!isSet){
-		ztLoggerWrite(ZONE, e_Debug, "[Table %d] Enter StateGameOver", engine->getGameId());
-		isSet = true;
-	}
-	//engine->terminate();
-	Sleep(5000);
-	if(++count > 10){
-		engine->terminate();
-	}
+	ztLoggerWrite(ZONE, e_Debug, "[Table %d] Enter StateGameOver", engine->getGameId());
+	Sleep(10000);
+	engine->setDying();
 	return GE_SUCCESS;
 }

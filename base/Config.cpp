@@ -37,6 +37,14 @@ int32_t ServerConfig::Load (void)
 	int32_t iValue = 0;
 	const char* pszValue = NULL;
 
+	// version
+	pszValue = pkElement->Attribute("version", &iValue);
+	if ((NULL == pszValue) || (iValue < 0))
+	{
+		return -1;
+	}
+	m_version = (int32_t)iValue;
+
 	// ip
 	pszValue = pkElement->Attribute("ip", &iValue);
 	if (NULL == pszValue)
@@ -78,6 +86,38 @@ int32_t ServerConfig::Load (void)
 	}
 	m_strDebugLevel = pszValue;
 
+	pkElement = kHandle.FirstChild("config").FirstChild("mysql").ToElement();
+	if (NULL == pkElement)
+	{
+		return -1;
+	}
+
+	// db hostname
+	pszValue = pkElement->Attribute("hostname", &iValue);
+	if (NULL == pszValue)
+	{
+		return -1;
+
+	}
+	m_db_hostname = pszValue;
+
+    // db username
+	pszValue = pkElement->Attribute("username", &iValue);
+	if (NULL == pszValue)
+	{
+		return -1;
+
+	}
+	m_db_username = pszValue;
+
+	// db password
+	pszValue = pkElement->Attribute("password", &iValue);
+	if (NULL == pszValue)
+	{
+		return -1;
+
+	}
+	m_db_password = pszValue;
 	return 0;
 }
 

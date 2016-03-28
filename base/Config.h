@@ -23,11 +23,15 @@ private:
 	friend class SingletonBase<ServerConfig>;
 
 public:
+	int32_t m_version;
 	std::string  m_strIP;
 	int16_t m_sPort;
 	int32_t m_iThreadNum;
 	int32_t m_iCheckTime;
 	std::string m_strDebugLevel;
+	std::string m_db_hostname;
+	std::string m_db_username;
+	std::string m_db_password;
 };
 
 
