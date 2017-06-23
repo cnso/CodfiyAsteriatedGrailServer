@@ -1,5 +1,7 @@
 #include "codec.h"
 
+static HeartBeat heartbeat;
+
 bool proto_encoder(uint16_t type, ::google::protobuf::Message& body, string& msg)
 {
 	MsgHeader header;
@@ -31,8 +33,7 @@ void* proto_decoder(const char* msg, uint16_t& type)
 	switch (header_ptr->type)
 	{
 	case MSG_HEARTBEAT:
-		proto = new HeartBeat();
-		proto->ParseFromArray(msg + SIZEOF_HEADER, header_ptr->len - SIZEOF_HEADER);
+		proto = &heartbeat;
 		break;
 	case MSG_REGISTER_REQ:
 		proto = new RegisterRequest();
@@ -70,6 +71,10 @@ void* proto_decoder(const char* msg, uint16_t& type)
 		proto = new ReadyForGameRequest();
 		proto->ParseFromArray(msg + SIZEOF_HEADER, header_ptr->len - SIZEOF_HEADER);
 		break;
+	case MSG_BECOME_LEADER_REQ:
+		proto = new BecomeLeaderRequest();
+		proto->ParseFromArray(msg + SIZEOF_HEADER, header_ptr->len - SIZEOF_HEADER);
+		break;
 	case MSG_TALK:
 		proto = new Talk();
 		proto->ParseFromArray(msg + SIZEOF_HEADER, header_ptr->len - SIZEOF_HEADER);
@@ -84,6 +89,14 @@ void* proto_decoder(const char* msg, uint16_t& type)
 		break;
 	case MSG_RESPOND:
 		proto = new Respond();
+		proto->ParseFromArray(msg + SIZEOF_HEADER, header_ptr->len - SIZEOF_HEADER);
+		break;
+	case MSG_BECOME_LEADER_REP:
+		proto = new BecomeLeaderResponse();
+		proto->ParseFromArray(msg + SIZEOF_HEADER, header_ptr->len - SIZEOF_HEADER);
+		break;
+	case MSG_POLLING_REP:
+		proto = new PollingResponse();
 		proto->ParseFromArray(msg + SIZEOF_HEADER, header_ptr->len - SIZEOF_HEADER);
 		break;
 	default:

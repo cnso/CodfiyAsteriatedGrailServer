@@ -1,12 +1,9 @@
-#include "UserAccountDAO.h"
+﻿#include "UserAccountDAO.h"
 #include <string>
 #include <mysql.h>
 #include <prepared_statement.h>
-#include "boost/date_time/posix_time/posix_time.hpp"
-#include "boost/format.hpp"
 using namespace std;
 using namespace sql;
-using namespace boost::posix_time; 
 
 void UserAccountDAO::insert(string username, string password, string nickname, int status)
 {
@@ -16,6 +13,27 @@ void UserAccountDAO::insert(string username, string password, string nickname, i
    update->setString(3, nickname);
    update->setInt(4, status);
    connection->executeUpdate(update);
+}
+void UserAccountDAO::gameComplete(string username)
+{
+	PreparedStatement* update = connection->prepare("update user set FinishTimes=FinishTimes+1 where UserName=?");
+
+	update->setString(1, username);
+	connection->executeUpdate(update);
+}
+
+void UserAccountDAO::gameStart(string username)
+{
+	PreparedStatement* update = connection->prepare("update user set PlayTimes=PlayTimes+1 where UserName=?");
+	update->setString(1, username);
+	connection->executeUpdate(update);
+}
+
+void UserAccountDAO::gameFlee(string username)
+{
+	PreparedStatement* update = connection->prepare("update user set FleeTimes=FleeTimes+1 where UserName=?");
+	update->setString(1, username);
+	connection->executeUpdate(update);
 }
 
 struct UserAccount UserAccountDAO::query(string username, string password)
@@ -34,21 +52,9 @@ struct UserAccount UserAccountDAO::query(string username, string password)
 	   status = STATUS_LOGIN_FAILED;
    }
    if(status == STATUS_NORMAL || status == STATUS_VIP){
-	   PreparedStatement* update = connection->prepare("update user set LastLogInTime=? where UserName=? ");
-	   ptime now = second_clock::local_time();
-	   const boost::wformat f = boost::wformat(L"%s-%02d-%02d %02d:%02d:%02d")
-		        % now.date().year_month_day().year
-				% now.date().year_month_day().month.as_number()
-		        % now.date().year_month_day().day.as_number()
-                                
-                % now.time_of_day().hours()
-                % now.time_of_day().minutes()
-				% now.time_of_day().seconds();
+	   PreparedStatement* update = connection->prepare("update user set LastLogInTime=NOW() where UserName=? ");
 
-	   const std::wstring result = f.str();
-	   string lastLogInTime(result.begin(), result.end());
-	   update->setString(1, lastLogInTime);
-	   update->setString(2, username);
+	   update->setString(1, username);
 	   connection->executeUpdate(update);
    }
    delete res;
